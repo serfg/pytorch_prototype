@@ -60,7 +60,7 @@ class SphericalExpansion(nn.Module):
         self.register_buffer("species2idx", species2idx)
 
         self.Rln = splined_radial_integrals(self.nmax, self.lmax+1,
-                                self.rc, self.sigma, mesh_size=600)
+                                self.rc, self.sigma, self.cutoff, mesh_size=600)
 
         self.irreps_sh = o3.Irreps.spherical_harmonics(lmax=self.lmax)
         self.Ylm = SphericalHarmonics(self.irreps_sh, normalization='integral',

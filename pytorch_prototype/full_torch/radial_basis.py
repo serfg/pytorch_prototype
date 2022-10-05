@@ -2,22 +2,37 @@ import torch
 import numpy as np
 from mpmath import hyp1f1,gamma,exp,power
 from itertools import product
-
-from torchcubicspline import natural_cubic_spline_coeffs
+from scipy import interpolate
 
 from .interpolator import NaturalCubicSpline
 
-def fit_splined_radial_integrals(nmax, lmax, rc, sigma, mesh_size=600):
-    c = 0.5/sigma**2
-    length, channels = mesh_size, nmax*lmax
-    dists = torch.linspace(0, rc+1e-6, length)
-    x = torch.from_numpy(o_ri_gto(rc, nmax, lmax, dists, c)).reshape(
-                                                (length, channels))
-    coeffs = natural_cubic_spline_coeffs(dists, x)
+def fit_splined_radial_integrals(nmax, lmax, rc, sigma, cutoff, mesh_size):
+    c = 0.5 / sigma**2
+    length, channels = mesh_size, nmax * lmax
+
+    dists = np.linspace(0, rc + 1e-3, length, dtype=np.float32)
+    x = o_ri_gto(rc, nmax, lmax, dists, c).reshape((length, lmax, nmax))
+    x *= cutoff(torch.from_numpy(dists)).numpy()[:, None, None]
+    coeffs = torch.zeros(((4, length - 1, lmax, nmax)))
+    for l in range(lmax):
+        for n in range(nmax):
+            ispl = interpolate.CubicSpline(dists, x[:, l, n], bc_type="natural")
+            for i in range(4):
+                coeffs[i, :, l, n] = torch.from_numpy(ispl.c[-i - 1])
+
+    coeffs = coeffs.view(4, length - 1, -1)
+    coeffs = (
+        torch.from_numpy(dists),
+        coeffs[0],
+        coeffs[1],
+        coeffs[2],
+        coeffs[3],
+    )
     return coeffs
 
-def splined_radial_integrals(nmax, lmax, rc, sigma, mesh_size=600):
-    coeffs = fit_splined_radial_integrals(nmax, lmax, rc, sigma, mesh_size)
+
+def splined_radial_integrals(nmax, lmax, rc, sigma, cutoff, mesh_size=600):
+    coeffs = fit_splined_radial_integrals(nmax, lmax, rc, sigma, cutoff, mesh_size)
     Rnl = NaturalCubicSpline(coeffs)
     return Rnl
 
